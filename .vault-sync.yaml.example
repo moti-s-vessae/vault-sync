@@ -1,0 +1,25 @@
+# vault-sync example configuration file.
+# Copy to .vault-sync.yaml and fill in your values.
+# Environment variables override all file settings.
+
+# Address of the Vault server.
+# Can also be set via VAULT_ADDR environment variable.
+vault_addr: "http://127.0.0.1:8200"
+
+# Vault token used for authentication.
+# Prefer setting this via the VAULT_TOKEN environment variable
+# rather than storing it in this file.
+# vault_token: "s.XXXXXXXXXXXXXXXX"
+
+# KV secrets engine mount path.
+# For KV v2 this is typically "secret" or "kv".
+mount_path: "secret"
+
+# Namespace (path prefix) inside the mount to sync.
+# Example: "myapp/production" will sync all secrets under
+# secret/myapp/production/**
+namespace: "myapp/production"
+
+# Path to the output .env file.
+# Defaults to ".env" in the current directory.
+output_file: ".env"
