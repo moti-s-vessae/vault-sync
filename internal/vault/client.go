@@ -102,11 +102,13 @@ func (c *Client) ListPathsRecursive(ctx context.Context, mountPath, prefix strin
 			subPrefix := strings.TrimSuffix(prefix, "/") + "/" + entry
 			children, err := c.ListPathsRecursive(ctx, mountPath, subPrefix)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("listing paths under %q: %w", subPrefix, err)
 			}
 			result = append(result, children...)
 		} else {
-			result = append(result, strings.TrimSuffix(prefix, "/")+"/"+entry)
+			// Prepend the prefix so callers receive full relative paths.
+			leafPath := strings.TrimSuffix(prefix, "/") + "/" + entry
+			result = append(result, strings.TrimPrefix(leafPath, "/"))
 		}
 	}
 
