@@ -1,63 +1,78 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 	"log"
 
-	"github.com/example/vault-sync/internal/config"
-	"github.com/example/vault-sync/internal/env"
-	"github.com/example/vault-sync/internal/vault"
+	"github.com/user/vault-sync/internal/env"
+	"github.com/user/vault-sync/internal/vault"
 )
 
-// Result holds the outcome of a sync operation.
-type Result struct {
-	SecretsTotal   int
-	SecretsWritten int
-	OutputFile     string
+// VaultClient abstracts Vault secret retrieval.
+type VaultClient interface {
+	GetSecrets(ctx context.Context, path string) (map[string]string, error)
 }
 
-// Syncer orchestrates fetching secrets from Vault and writing them to a .env file.
+// Syncer orchestrates fetching, filtering, diffing, and writing secrets.
 type Syncer struct {
-	client *vault.Client
-	cfg    *config.Config
+	client   VaultClient
+	path     string
+	output   string
+	prefixes []string
+	renames  []vault.RenameRule
+	dryRun   bool
 }
 
-// New creates a new Syncer from the provided config.
-func New(cfg *config.Config) (*Syncer, error) {
-	client, err := vault.NewClient(cfg.VaultAddr, cfg.VaultToken)
-	if err != nil {
-		return nil, fmt.Errorf("creating vault client: %w", err)
+// New creates a new Syncer.
+func New(client VaultClient, path, output string, prefixes []string, renames []vault.RenameRule, dryRun bool) *Syncer {
+	return &Syncer{
+		client:   client,
+		path:     path,
+		output:   output,
+		prefixes: prefixes,
+		renames:  renames,
+		dryRun:   dryRun,
 	}
-	return &Syncer{client: client, cfg: cfg}, nil
 }
 
-// Run performs the full sync: fetch → filter → write.
-func (s *Syncer) Run() (*Result, error) {
-	log.Printf("fetching secrets from %s (path: %s)", s.cfg.VaultAddr, s.cfg.SecretPath)
-
-	secrets, err := s.client.GetSecrets(s.cfg.SecretPath)
+// Run executes the sync: fetch → filter → rename → diff → write.
+func (s *Syncer) Run(ctx context.Context) error {
+	secrets, err := s.client.GetSecrets(ctx, s.path)
 	if err != nil {
-		return nil, fmt.Errorf("fetching secrets: %w", err)
+		return fmt.Errorf("fetching secrets: %w", err)
 	}
 
-	total := len(secrets)
-
-	if len(s.cfg.Prefixes) > 0 {
-		secrets = vault.FilterSecrets(secrets, s.cfg.Prefixes)
-		if s.cfg.StripPrefix {
-			secrets = vault.StripPrefix(secrets, s.cfg.Prefixes)
-		}
+	if len(s.prefixes) > 0 {
+		secrets = vault.FilterSecrets(secrets, s.prefixes)
+		secrets = vault.StripPrefix(secrets, s.prefixes)
 	}
 
-	if err := env.WriteEnvFile(s.cfg.OutputFile, secrets); err != nil {
-		return nil, fmt.Errorf("writing env file: %w", err)
+	if len(s.renames) > 0 {
+		secrets = vault.ApplyRenames(secrets, s.renames)
 	}
 
-	log.Printf("wrote %d secret(s) to %s", len(secrets), s.cfg.OutputFile)
+	existing, err := env.ReadEnvFile(s.output)
+	if err != nil {
+		return fmt.Errorf("reading existing env file: %w", err)
+	}
 
-	return &Result{
-		SecretsTotal:   total,
-		SecretsWritten: len(secrets),
-		OutputFile:     s.cfg.OutputFile,
-	}, nil
+	diff := vault.DiffSecrets(secrets, existing)
+	if !diff.HasChanges() {
+		log.Println("no changes detected, skipping write")
+		return nil
+	}
+
+	log.Printf("changes: +%d -%d ~%d", len(diff.Added), len(diff.Removed), len(diff.Changed))
+
+	if s.dryRun {
+		log.Println("dry-run mode: skipping file write")
+		return nil
+	}
+
+	if err := env.WriteEnvFile(s.output, secrets); err != nil {
+		return fmt.Errorf("writing env file: %w", err)
+	}
+
+	return nil
 }
