@@ -60,6 +60,7 @@ func (c *Client) GetSecrets(ctx context.Context, mountPath, secretPath string) (
 }
 
 // ListPaths lists all secret paths under the given KV v2 mount and prefix.
+// Paths ending with "/" are subdirectories and can be listed recursively.
 func (c *Client) ListPaths(ctx context.Context, mountPath, prefix string) ([]string, error) {
 	fullPath := strings.TrimSuffix(mountPath, "/") + "/metadata/" + strings.TrimPrefix(prefix, "/")
 
@@ -85,4 +86,29 @@ func (c *Client) ListPaths(ctx context.Context, mountPath, prefix string) ([]str
 	}
 
 	return paths, nil
+}
+
+// ListPathsRecursive lists all leaf secret paths (non-directory) under the given
+// KV v2 mount and prefix, traversing subdirectories automatically.
+func (c *Client) ListPathsRecursive(ctx context.Context, mountPath, prefix string) ([]string, error) {
+	entries, err := c.ListPaths(ctx, mountPath, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []string
+	for _, entry := range entries {
+		if strings.HasSuffix(entry, "/") {
+			subPrefix := strings.TrimSuffix(prefix, "/") + "/" + entry
+			children, err := c.ListPathsRecursive(ctx, mountPath, subPrefix)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, children...)
+		} else {
+			result = append(result, strings.TrimSuffix(prefix, "/")+"/"+entry)
+		}
+	}
+
+	return result, nil
 }
