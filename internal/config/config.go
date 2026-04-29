@@ -2,32 +2,42 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/user/vault-sync/internal/vault"
 )
 
-// Config holds all runtime configuration for vault-sync.
+// Config holds all configuration for vault-sync.
 type Config struct {
-	VaultAddr   string   `yaml:"vault_addr"`
-	VaultToken  string   `yaml:"vault_token"`
-	SecretPath  string   `yaml:"secret_path"`
-	OutputFile  string   `yaml:"output_file"`
-	Prefixes    []string `yaml:"prefixes"`
-	StripPrefix bool     `yaml:"strip_prefix"`
+	VaultAddr  string   `yaml:"vault_addr"`
+	VaultToken string   `yaml:"vault_token"`
+	SecretPath string   `yaml:"secret_path"`
+	OutputFile string   `yaml:"output_file"`
+	Prefixes   []string `yaml:"prefixes"`
+	AuditLog   string   `yaml:"audit_log"`
+
+	Renames    []vault.RenameRule    `yaml:"renames"`
+	Transforms []vault.TransformRule `yaml:"transforms"`
 }
 
-// Load reads config from file (if it exists) then overlays environment variables.
-func Load(cfgFile string) (*Config, error) {
+// Load reads configuration from a YAML file and overrides with environment variables.
+func Load(path string) (*Config, error) {
 	cfg := &Config{
 		VaultAddr:  "http://127.0.0.1:8200",
 		OutputFile: ".env",
 	}
 
-	if data, err := os.ReadFile(cfgFile); err == nil {
-		if err := yaml.Unmarshal(data, cfg); err != nil {
-			return nil, fmt.Errorf("parsing config file %q: %w", cfgFile, err)
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		if err == nil {
+			if err := yaml.Unmarshal(data, cfg); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -45,11 +55,7 @@ func Load(cfgFile string) (*Config, error) {
 	}
 
 	if cfg.VaultToken == "" {
-		return nil, errors.New("vault token is required (set VAULT_TOKEN or vault_token in config)")
+		return nil, errors.New("vault token is required: set vault_token in config or VAULT_TOKEN env var")
 	}
-	if cfg.SecretPath == "" {
-		return nil, errors.New("secret_path is required")
-	}
-
 	return cfg, nil
 }
