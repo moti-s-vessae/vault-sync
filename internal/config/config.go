@@ -1,60 +1,55 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
-// Config holds the application configuration.
+// Config holds all runtime configuration for vault-sync.
 type Config struct {
-	VaultAddr  string `mapstructure:"vault_addr"`
-	VaultToken string `mapstructure:"vault_token"`
-	Namespace  string `mapstructure:"namespace"`
-	OutputFile string `mapstructure:"output_file"`
-	MountPath  string `mapstructure:"mount_path"`
+	VaultAddr   string   `yaml:"vault_addr"`
+	VaultToken  string   `yaml:"vault_token"`
+	SecretPath  string   `yaml:"secret_path"`
+	OutputFile  string   `yaml:"output_file"`
+	Prefixes    []string `yaml:"prefixes"`
+	StripPrefix bool     `yaml:"strip_prefix"`
 }
 
-// Load reads configuration from a file and environment variables.
-// Environment variables take precedence over file values.
+// Load reads config from file (if it exists) then overlays environment variables.
 func Load(cfgFile string) (*Config, error) {
-	v := viper.New()
-
-	v.SetDefault("vault_addr", "http://127.0.0.1:8200")
-	v.SetDefault("output_file", ".env")
-	v.SetDefault("mount_path", "secret")
-
-	v.SetEnvPrefix("VAULT_SYNC")
-	v.AutomaticEnv()
-
-	// Also bind standard Vault env vars.
-	_ = v.BindEnv("vault_addr", "VAULT_ADDR")
-	_ = v.BindEnv("vault_token", "VAULT_TOKEN")
-
-	if cfgFile != "" {
-		v.SetConfigFile(cfgFile)
-	} else {
-		v.AddConfigPath(".")
-		v.SetConfigName(".vault-sync")
-		v.SetConfigType("yaml")
+	cfg := &Config{
+		VaultAddr:  "http://127.0.0.1:8200",
+		OutputFile: ".env",
 	}
 
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(*os.PathError); !ok && cfgFile != "" {
-			return nil, fmt.Errorf("reading config file: %w", err)
+	if data, err := os.ReadFile(cfgFile); err == nil {
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("parsing config file %q: %w", cfgFile, err)
 		}
-		// Config file is optional; continue with defaults + env vars.
 	}
 
-	var cfg Config
-	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("unmarshalling config: %w", err)
+	if v := os.Getenv("VAULT_ADDR"); v != "" {
+		cfg.VaultAddr = v
+	}
+	if v := os.Getenv("VAULT_TOKEN"); v != "" {
+		cfg.VaultToken = v
+	}
+	if v := os.Getenv("VAULT_SECRET_PATH"); v != "" {
+		cfg.SecretPath = v
+	}
+	if v := os.Getenv("VAULT_SYNC_OUTPUT"); v != "" {
+		cfg.OutputFile = v
 	}
 
 	if cfg.VaultToken == "" {
-		return nil, fmt.Errorf("vault token is required (set VAULT_TOKEN or vault_token in config)")
+		return nil, errors.New("vault token is required (set VAULT_TOKEN or vault_token in config)")
+	}
+	if cfg.SecretPath == "" {
+		return nil, errors.New("secret_path is required")
 	}
 
-	return &cfg, nil
+	return cfg, nil
 }
