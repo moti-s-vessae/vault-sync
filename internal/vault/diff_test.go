@@ -5,69 +5,85 @@ import (
 )
 
 func TestDiffSecrets_Added(t *testing.T) {
-	current := map[string]string{"FOO": "bar", "NEW_KEY": "new"}
-	existing := map[string]string{"FOO": "bar"}
-
-	result := DiffSecrets(current, existing)
-
-	if len(result.Added) != 1 || result.Added["NEW_KEY"] != "new" {
-		t.Errorf("expected NEW_KEY in Added, got %v", result.Added)
-	}
-	if len(result.Removed) != 0 {
-		t.Errorf("expected no removals, got %v", result.Removed)
+	old := map[string]string{}
+	new_ := map[string]string{"FOO": "bar"}
+	changes := DiffSecrets(old, new_)
+	if len(changes) != 1 || changes[0].Action != "added" || changes[0].Key != "FOO" {
+		t.Errorf("expected one added change, got %+v", changes)
 	}
 }
 
 func TestDiffSecrets_Removed(t *testing.T) {
-	current := map[string]string{"FOO": "bar"}
-	existing := map[string]string{"FOO": "bar", "OLD_KEY": "old"}
-
-	result := DiffSecrets(current, existing)
-
-	if len(result.Removed) != 1 || result.Removed["OLD_KEY"] != "old" {
-		t.Errorf("expected OLD_KEY in Removed, got %v", result.Removed)
+	old := map[string]string{"FOO": "bar"}
+	new_ := map[string]string{}
+	changes := DiffSecrets(old, new_)
+	if len(changes) != 1 || changes[0].Action != "removed" || changes[0].Key != "FOO" {
+		t.Errorf("expected one removed change, got %+v", changes)
 	}
 }
 
 func TestDiffSecrets_Changed(t *testing.T) {
-	current := map[string]string{"FOO": "new_val"}
-	existing := map[string]string{"FOO": "old_val"}
-
-	result := DiffSecrets(current, existing)
-
-	if len(result.Changed) != 1 || result.Changed["FOO"] != "new_val" {
-		t.Errorf("expected FOO in Changed, got %v", result.Changed)
+	old := map[string]string{"FOO": "old"}
+	new_ := map[string]string{"FOO": "new"}
+	changes := DiffSecrets(old, new_)
+	if len(changes) != 1 || changes[0].Action != "changed" {
+		t.Errorf("expected one changed entry, got %+v", changes)
+	}
+	if changes[0].OldVal != "old" || changes[0].NewVal != "new" {
+		t.Errorf("unexpected old/new values: %+v", changes[0])
 	}
 }
 
 func TestDiffSecrets_Unchanged(t *testing.T) {
-	current := map[string]string{"FOO": "bar"}
-	existing := map[string]string{"FOO": "bar"}
-
-	result := DiffSecrets(current, existing)
-
-	if len(result.Unchanged) != 1 {
-		t.Errorf("expected FOO in Unchanged, got %v", result.Unchanged)
-	}
-	if result.HasChanges() {
-		t.Error("expected HasChanges to be false")
+	old := map[string]string{"FOO": "same"}
+	new_ := map[string]string{"FOO": "same"}
+	changes := DiffSecrets(old, new_)
+	if len(changes) != 1 || changes[0].Action != "unchanged" {
+		t.Errorf("expected unchanged, got %+v", changes)
 	}
 }
 
 func TestDiffSecrets_Empty(t *testing.T) {
-	result := DiffSecrets(map[string]string{}, map[string]string{})
+	changes := DiffSecrets(map[string]string{}, map[string]string{})
+	if len(changes) != 0 {
+		t.Errorf("expected no changes, got %+v", changes)
+	}
+}
 
-	if result.HasChanges() {
-		t.Error("expected no changes for empty maps")
+func TestDiffSecrets_Mixed(t *testing.T) {
+	old := map[string]string{"A": "1", "B": "2", "C": "3"}
+	new_ := map[string]string{"A": "1", "B": "updated", "D": "4"}
+	changes := DiffSecrets(old, new_)
+
+	actions := map[string]string{}
+	for _, c := range changes {
+		actions[c.Key] = c.Action
+	}
+
+	if actions["A"] != "unchanged" {
+		t.Errorf("A should be unchanged, got %s", actions["A"])
+	}
+	if actions["B"] != "changed" {
+		t.Errorf("B should be changed, got %s", actions["B"])
+	}
+	if actions["C"] != "removed" {
+		t.Errorf("C should be removed, got %s", actions["C"])
+	}
+	if actions["D"] != "added" {
+		t.Errorf("D should be added, got %s", actions["D"])
 	}
 }
 
 func TestHasChanges_True(t *testing.T) {
-	current := map[string]string{"A": "1"}
-	existing := map[string]string{}
+	changes := []SecretChange{{Key: "X", Action: "added"}}
+	if !HasChanges(changes) {
+		t.Error("expected HasChanges to return true")
+	}
+}
 
-	result := DiffSecrets(current, existing)
-	if !result.HasChanges() {
-		t.Error("expected HasChanges to be true")
+func TestHasChanges_False(t *testing.T) {
+	changes := []SecretChange{{Key: "X", Action: "unchanged"}}
+	if HasChanges(changes) {
+		t.Error("expected HasChanges to return false")
 	}
 }

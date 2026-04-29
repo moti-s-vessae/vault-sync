@@ -1,43 +1,46 @@
 package vault
 
-// DiffResult holds the result of comparing two secret maps.
-type DiffResult struct {
-	Added   map[string]string
-	Removed map[string]string
-	Changed map[string]string
-	Unchanged map[string]string
+// SecretChange describes a single change between two secret maps.
+type SecretChange struct {
+	Key    string
+	Action string // "added", "removed", "changed", "unchanged"
+	OldVal string
+	NewVal string
 }
 
-// DiffSecrets compares current secrets (from Vault) against existing secrets
-// (e.g. loaded from a .env file) and returns a DiffResult.
-func DiffSecrets(current, existing map[string]string) DiffResult {
-	result := DiffResult{
-		Added:     make(map[string]string),
-		Removed:   make(map[string]string),
-		Changed:   make(map[string]string),
-		Unchanged: make(map[string]string),
-	}
+// DiffSecrets compares old and new secret maps and returns a list of changes.
+// Only keys present in newSecrets are considered (removed keys are detected from old).
+func DiffSecrets(oldSecrets, newSecrets map[string]string) []SecretChange {
+	var changes []SecretChange
 
-	for k, v := range current {
-		if old, ok := existing[k]; !ok {
-			result.Added[k] = v
-		} else if old != v {
-			result.Changed[k] = v
+	// detect added and changed
+	for k, newVal := range newSecrets {
+		oldVal, exists := oldSecrets[k]
+		if !exists {
+			changes = append(changes, SecretChange{Key: k, Action: "added", NewVal: newVal})
+		} else if oldVal != newVal {
+			changes = append(changes, SecretChange{Key: k, Action: "changed", OldVal: oldVal, NewVal: newVal})
 		} else {
-			result.Unchanged[k] = v
+			changes = append(changes, SecretChange{Key: k, Action: "unchanged", OldVal: oldVal, NewVal: newVal})
 		}
 	}
 
-	for k, v := range existing {
-		if _, ok := current[k]; !ok {
-			result.Removed[k] = v
+	// detect removed
+	for k, oldVal := range oldSecrets {
+		if _, exists := newSecrets[k]; !exists {
+			changes = append(changes, SecretChange{Key: k, Action: "removed", OldVal: oldVal})
 		}
 	}
 
-	return result
+	return changes
 }
 
-// HasChanges returns true if there are any added, removed, or changed secrets.
-func (d DiffResult) HasChanges() bool {
-	return len(d.Added) > 0 || len(d.Removed) > 0 || len(d.Changed) > 0
+// HasChanges returns true if any change is not "unchanged".
+func HasChanges(changes []SecretChange) bool {
+	for _, c := range changes {
+		if c.Action != "unchanged" {
+			return true
+		}
+	}
+	return false
 }
