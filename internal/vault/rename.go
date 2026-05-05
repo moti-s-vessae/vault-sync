@@ -35,3 +35,24 @@ func applyFirstMatch(key string, rules []RenameRule) string {
 	}
 	return key
 }
+
+// ValidateRules checks rename rules for common configuration mistakes.
+// It returns an error if any rule has an empty From or To field, or if
+// the same From key appears more than once (which would make later rules
+// unreachable).
+func ValidateRules(rules []RenameRule) error {
+	seen := make(map[string]int, len(rules))
+	for i, r := range rules {
+		if r.From == "" {
+			return fmt.Errorf("rename rule %d: 'from' must not be empty", i)
+		}
+		if r.To == "" {
+			return fmt.Errorf("rename rule %d: 'to' must not be empty", i)
+		}
+		if prev, dup := seen[r.From]; dup {
+			return fmt.Errorf("rename rule %d: duplicate 'from' key %q already defined at rule %d", i, r.From, prev)
+		}
+		seen[r.From] = i
+	}
+	return nil
+}
