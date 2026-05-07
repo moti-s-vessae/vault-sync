@@ -87,3 +87,22 @@ func TestGroup_SortedGroupNames(t *testing.T) {
 		}
 	}
 }
+
+func TestGroup_MixedDelimiterAndNoDelimiter(t *testing.T) {
+	g, _ := NewSecretGrouper(GroupByPrefix, "_")
+	secrets := map[string]string{
+		"DB_HOST": "localhost",
+		"STANDALONE": "value",
+	}
+	groups := g.Group(secrets)
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+	// Groups should be sorted: DB, default
+	if groups[0].Name != "DB" {
+		t.Errorf("expected first group DB, got %s", groups[0].Name)
+	}
+	if groups[1].Name != "default" {
+		t.Errorf("expected second group 'default', got %s", groups[1].Name)
+	}
+}
