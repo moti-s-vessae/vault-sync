@@ -56,6 +56,14 @@ func TestFilterSecrets_NoMatch(t *testing.T) {
 	}
 }
 
+func TestFilterSecrets_NilSecrets(t *testing.T) {
+	result := FilterSecrets(nil, []string{"APP_"})
+
+	if len(result) != 0 {
+		t.Fatalf("expected 0 secrets for nil input, got %d", len(result))
+	}
+}
+
 func TestStripPrefix_RemovesPrefix(t *testing.T) {
 	secrets := map[string]string{
 		"APP_DB_HOST": "localhost",
