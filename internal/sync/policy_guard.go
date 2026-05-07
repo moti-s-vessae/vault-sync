@@ -48,3 +48,16 @@ func (g *PolicyGuard) FilterAllowed(paths []string) []string {
 	}
 	return allowed
 }
+
+// DeniedPaths returns the subset of paths that are NOT permitted by the policy.
+// This is useful for audit logging or reporting which paths would be blocked.
+func (g *PolicyGuard) DeniedPaths(paths []string) []string {
+	var denied []string
+	for _, path := range paths {
+		if err := g.policy.CheckAccess(path, g.capability); err != nil {
+			g.logger.Printf("[policy] denied path detected: path=%q capability=%q", path, g.capability)
+			denied = append(denied, path)
+		}
+	}
+	return denied
+}
