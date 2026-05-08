@@ -39,6 +39,17 @@ func (st *SecretTemplater) Render(secrets map[string]string) (string, error) {
 	return buf.String(), nil
 }
 
+// RenderNew creates a SecretTemplater from tmplStr and immediately renders it
+// with the provided secrets. This is a convenience wrapper around
+// NewSecretTemplater and Render for one-shot template execution.
+func RenderNew(tmplStr string, secrets map[string]string) (string, error) {
+	st, err := NewSecretTemplater(tmplStr)
+	if err != nil {
+		return "", err
+	}
+	return st.Render(secrets)
+}
+
 // TemplateStage returns a pipeline Stage that renders a template string
 // using the current secrets and stores the result under outputKey.
 // The secrets map is passed through unchanged.
