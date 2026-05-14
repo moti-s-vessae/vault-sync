@@ -9,6 +9,8 @@ type AnnotateConfig struct {
 }
 
 // Validate checks that the configuration is consistent.
+// It returns an error if the config is enabled but has no rules, or if any
+// rule is missing a required field (pattern or tag_key).
 func (c *AnnotateConfig) Validate() error {
 	if !c.Enabled {
 		return nil
@@ -32,6 +34,9 @@ func (c *AnnotateConfig) Validate() error {
 func (c *AnnotateConfig) ToAnnotator() (*SecretAnnotator, error) {
 	if !c.Enabled {
 		return nil, nil
+	}
+	if err := c.Validate(); err != nil {
+		return nil, err
 	}
 	return NewSecretAnnotator(c.Rules)
 }
